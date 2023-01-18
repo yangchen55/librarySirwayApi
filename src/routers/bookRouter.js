@@ -1,22 +1,29 @@
 import express from "express";
 import { ERROR, SUCCESS } from "../constant.js";
 import {
-  getBookByIsbn,
   addBook,
+  findBookAndDelete,
+  findBookAndUpdate,
   getAllBooks,
   getBookById,
-  findByBookAndUpdate,
-  deleteBook,
+  getBookByIsbn,
   getBorrowedBooks,
-} from "../models/Books/BookModel.js";
+} from "../models/Book/BookModel.js";
+import {
+  findTransactionAndUpdate,
+  getAllTransactions,
+  getAllTransactionsByQuery,
+  postTransaction,
+} from "../models/Transaction/TransactionModel.js";
 import { getUserById } from "../models/userModel/UserModel.js";
 
 const router = express.Router();
 
+// get books
 router.get("/", async (req, res, next) => {
   try {
     const books = await getAllBooks();
-    console.log(books);
+
     if (books) {
       return res.json({ books });
     }
@@ -26,35 +33,46 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+// Get borrowed books by specific users
+router.get("/borrowedBooks", async (req, res, next) => {
+  try {
+    const books = await getBorrowedBooks(req.headers.authorization);
+    return res.json(books);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// add a book
 router.post("/", async (req, res, next) => {
   const { isbn } = req.body;
   try {
     const bookExists = await getBookByIsbn(isbn);
+
     if (bookExists?._id) {
       return res.json({
-        status: Error,
-        message: "book alreafy exist!",
+        status: ERROR,
+        message: "Book already exists!",
       });
     }
 
     const book = await addBook(req.body);
-    // console.log(book);
 
     return book?._id
       ? res.json({
           status: SUCCESS,
-          message: "book added successfully",
+          message: "Book added successfully!",
         })
       : res.json({
           status: ERROR,
-          message: "unable to add",
+          message: "Unable to add book. Please try again later!",
         });
   } catch (error) {
     next(error);
   }
 });
 
-// borrow a book
+// Borrow a book
 router.post("/borrow", async (req, res, next) => {
   try {
     const bookId = req.body.bookId;
@@ -62,77 +80,111 @@ router.post("/borrow", async (req, res, next) => {
 
     const book = await getBookById(bookId);
     const user = await getUserById(authorization);
+
     if (book?._id && user?._id) {
       if (book?.borrowedBy.length) {
         return res.json({
           status: "error",
           message:
-            "this book has been borrowes and willl be availanle it has been ",
+            "This book has already been borrowed and will be available once it has been returned!",
         });
       }
-      const updateBook = await findByBookAndUpdate(bookId, {
-        $push: { borrowedBy: user._id },
+
+      const { isbn, thumbnail, title, author, year } = book;
+
+      const transaction = await postTransaction({
+        borrowedBy: {
+          userId: user?._id,
+          userName: user?.fName,
+        },
+        borrowedBook: {
+          isbn,
+          thumbnail,
+          title,
+          author,
+          year,
+        },
       });
-      return updateBook?._id
-        ? res.json({
-            status: "success",
-            message: "you have borrowed this",
-          })
-        : res.json({
-            status: "error",
-            message: "please try again",
-          });
+
+      if (transaction?._id) {
+        const updateBook = await findBookAndUpdate(bookId, {
+          $push: { borrowedBy: user._id },
+        });
+
+        return updateBook?._id
+          ? res.json({
+              status: "success",
+              message: "You have borrowed this book!",
+            })
+          : res.json({
+              status: "error",
+              message: "Something went wrong. Please try again later!",
+            });
+      }
+      return res.json({
+        status: "error",
+        message: "Unable to register transaction!",
+      });
     }
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/", async (req, res, next) => {
-  try {
-    const del = await deleteBook(req.body.bookId);
-    del?._id
-      ? res.json({
-          status: "success",
-          message: "book deleted successfully",
-        })
-      : res.json({
-          status: "error",
-          message: "unable to delete book",
-        });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// get boorrowed by specific user
-router.get("/borrowedBooks", async (req, res, next) => {
-  try {
-    const books = await getBorrowedBooks(req.headers.userId);
-    return books;
-  } catch (error) {}
-});
-
+// Return a book
 router.patch("/return", async (req, res, next) => {
   try {
     const book = await getBookById(req.body.bookId);
     const user = await getUserById(req.headers.authorization);
-    if (book?._id && user?._id) {
-      const updateBook = await findByBookAndUpdate(book._id, {
+    const transaction = await getAllTransactionsByQuery(user?._id, book?.isbn);
+    console.log(transaction);
+    const updateTransaction = await findTransactionAndUpdate(transaction?._id, {
+      returnDate: new Date(),
+    });
+
+    if (updateTransaction?.returnDate) {
+      const updateBook = await findBookAndUpdate(book._id, {
         $pull: { borrowedBy: user._id },
       });
       return updateBook?._id
         ? res.json({
             status: "success",
-            message: "you have returned this book",
+            message: "You have returned this book!",
           })
         : res.json({
-            status: "success",
-            message: "unable to retun",
+            status: "error",
+            message: "Unable to return book. Please try again later!",
           });
     }
   } catch (error) {
     next(error);
   }
 });
+
+// Delete a book
+router.delete("/", async (req, res, next) => {
+  try {
+    const book = await getBookById(req.body.bookId);
+    if (book?.borrowedBy.length) {
+      return res.json({
+        status: "error",
+        message: "unable to delete book, ",
+      });
+    }
+    const del = await findBookAndDelete(req.body.bookId);
+
+    del?._id
+      ? res.json({
+          status: "success",
+          message: "Book deleted successfully!",
+        })
+      : res.json({
+          status: "error",
+          message: "Unable to delete book!",
+        });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

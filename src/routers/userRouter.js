@@ -1,28 +1,29 @@
-import express from "express";
-import { ERROR, SUCCESS } from "../constant.js";
-import { comparePassword, hashPassword } from "../helpers/BrcyptHelper.js";
-const router = express.Router();
+import express from "express"
+import { ERROR, SUCCESS } from "../constant.js"
+import { comparePassword, hashPassword } from "../helpers/BrcyptHelper.js"
+const router = express.Router()
 import {
   createUser,
   getAnyUser,
   getUserByEmail,
-} from "../models/userModel/UserModel.js";
+} from "../models/userModel/UserModel.js"
 
 router.get("/", (req, res, next) => {
   try {
     res.json({
       status: SUCCESS,
       message: "todo get user",
-    });
+    })
   } catch (error) {
-    next(error);
+    next(error)
   }
-});
+})
 
 // create new user
 router.post("/", async (req, res, next) => {
   // try {
   //   const result = await createUser(req.body)
+
   //   result?._id
   //     ? res.json({
   //         status: SUCCESS,
@@ -37,83 +38,94 @@ router.post("/", async (req, res, next) => {
   //     error.message = "There is another user exist with this email"
   //     error.errorCode = 200
   //   }
+
   //   next(error)
   // }
+
   try {
-    const { email } = req.body;
-    const userExists = await getUserByEmail(email);
+    const { email } = req.body
+
+    const userExists = await getUserByEmail(email)
     if (userExists) {
       return res.json({
         status: "error",
-        message: " user alreafy exits, please login",
-      });
+        message: "User already exists. Please log in!",
+      })
     }
-    const hashPass = hashPassword(req.body.password);
+
+    // hash password
+    const hashPass = hashPassword(req.body.password)
+
     if (hashPass) {
-      req.body.password = hashPass;
-      const result = await createUser(req.body);
+      req.body.password = hashPass
+      const result = await createUser(req.body)
+
       if (result?._id) {
         return res.json({
           status: SUCCESS,
-          message: "user has been created successfully, you may login now",
-        });
+          message: "User has been created successfully. You may now log in!",
+        })
       }
       return res.json({
         status: ERROR,
-        message: "user not created",
-      });
+        message: "User not created. Please try again later!",
+      })
     }
-  } catch (error) {}
-});
+  } catch (error) {
+    next(error)
+  }
+})
 
+// login user
 router.post("/login", async (req, res, next) => {
   // try {
-  //   const { email, password } = req.body;
-  //   const user = await getAnyUser({ email });
+  //   const { email, password } = req.body
+  //   const user = await getAnyUser({ email })
+
   //   if (user?._id) {
   //     if (user.password !== password) {
   //       return res.json({
   //         status: ERROR,
   //         message: "Inavalid Login Details",
-  //       });
+  //       })
   //     }
-  //     user.password = undefined;
-  //     return res.json({
-  //       status: "success",
-  //       message: "Login Successful!",
-  //       user,
-  //     });
+  //     user.password = undefined
+  //     return res.json({ status: "success", message: "Login Successful!", user })
   //   }
-  //   res.json({ status: "error", message: "User not found!" });
+
+  //   res.json({ status: "error", message: "User not found!" })
   // } catch (error) {
-  //   next(error);
+  //   next(error)
   // }
+
   try {
-    const { email } = req.body;
-    const user = await getUserByEmail(email);
+    const { email } = req.body
+    const user = await getUserByEmail(email)
+
     if (user?._id) {
-      const isPassMatch = comparePassword(req.body.password, user.password);
+      // Check if password is valid
+      const isPassMatch = comparePassword(req.body.password, user.password)
       if (isPassMatch) {
-        user.password = undefined;
+        user.password = undefined
         return res.json({
           status: SUCCESS,
-          message: "Login successfully",
+          message: "Login successful",
           user,
-        });
+        })
       }
       res.json({
         status: ERROR,
-        message: "invalid email or password",
-      });
+        message: "Invalid password",
+      })
     } else {
       res.json({
         status: ERROR,
-        message: "user not found",
-      });
+        message: "User not found!",
+      })
     }
   } catch (error) {
-    next(error);
+    next(error)
   }
-});
+})
 
-export default router;
+export default router
